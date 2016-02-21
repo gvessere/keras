@@ -9,7 +9,7 @@ from tempfile import mkstemp
 from datetime import datetime
 import random
 import os as os
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np
 import random
 import sys
@@ -37,7 +37,7 @@ indices_char = dict((i, c) for i, c in enumerate(chars))
 # vectorize genes of size at most maxlen
 maxlen = 800 
 step = 1
-batchsize=512
+batchsize=1024
 dropout=0.2
 
 if len(sys.argv) > 1:
@@ -147,7 +147,7 @@ os.write(resultfile,"char-rnn dna model: " + str(datetime.now()) + '\n' + "dropo
 for epoch in range(100):
     print("")
     print("epoch: %d" % epoch)
-    for windowStart in range(0,200,windowSize): ####
+    for windowStart in range(0,1600,windowSize): ####
         windowEnd=windowStart+windowSize
         print("")
         print("processing sequences in window %d-%d" % (windowStart, windowEnd))
@@ -155,7 +155,7 @@ for epoch in range(100):
         
         if len(Xtrain) == 0:
             continue
-        batches = 2 ###### len(Xtrain)/batchsize 
+        batches = len(Xtrain)/batchsize ####
         for batch in range(batches):
             print()
             print('-' * 20, 'batch #', batch, '/', batches, '-' * 20)
