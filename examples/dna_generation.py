@@ -5,32 +5,39 @@ from keras.models import Sequential
 from keras.layers.core import Dense, Activation, Dropout, Masking
 from keras.layers.recurrent import LSTM
 from keras.datasets.data_utils import get_file, Progbar
+from tempfile import mkstemp
+from datetime import datetime
+import random
+import os as os
 import matplotlib.pyplot as plt
 import numpy as np
 import random
 import sys
 
 # input sequence file obtained with the following commands 
-# returns genes with uppercased exons (no 5' and 3' UTRs)
-# wget "http://genome.ucsc.edu/cgi-bin/hgTables?hgsid=476467603_ZpmULv360T1UveJRDFvf1WjGEDq6&hgSeq.promoter=on&boolshad.hgSeq.promoter=0&hgSeq.promoterSize=300&hgSeq.utrExon5=on&boolshad.hgSeq.utrExon5=0&hgSeq.cdsExon=on&boolshad.hgSeq.cdsExon=0&hgSeq.utrExon3=on&boolshad.hgSeq.utrExon3=0&hgSeq.intron=on&boolshad.hgSeq.intron=0&hgSeq.downstream=on&boolshad.hgSeq.downstream=0&hgSeq.downstreamSize=300&hgSeq.granularity=feature&hgSeq.padding5=50&hgSeq.padding3=50&hgSeq.splitCDSUTR=on&boolshad.hgSeq.splitCDSUTR=0&hgSeq.casing=exon&boolshad.hgSeq.maskRepeats=0&hgSeq.repMasking=lower&hgta_doGenomicDna=get+sequence" -O kg_one_record_per_region.fasta
-# cat kg_one_record_per_region.fasta | perl -pe "s/^(>.+)$/\1|/g" |perl -pe "s/\|/\t/g" | perl -pe "s/=([-+])/\t\1\t/" | perl -pe "s/chr(.+?):(\d+)-(\d+)/\t\1\t\2\t\3\t/" | cut -f1,2,3,4,6,8 | perl -pe "s/>.+?\t/|/s" | perl -pe "s/\n//s" | tr "|" "\n" | cut -f5 | sort | uniq > ~/.keras/datasets/kg_one_record_per_region.seq.uq
+# returns all gene regions in separate records with uppercased exons
+# wget -O kg_one_record_per_region.fasta "http://genome.ucsc.edu/cgi-bin/hgTables?hgsid=476467603_ZpmULv360T1UveJRDFvf1WjGEDq6&hgSeq.promoter=on&boolshad.hgSeq.promoter=0&hgSeq.promoterSize=300&hgSeq.utrExon5=on&boolshad.hgSeq.utrExon5=0&hgSeq.cdsExon=on&boolshad.hgSeq.cdsExon=0&hgSeq.utrExon3=on&boolshad.hgSeq.utrExon3=0&hgSeq.intron=on&boolshad.hgSeq.intron=0&hgSeq.downstream=on&boolshad.hgSeq.downstream=0&hgSeq.downstreamSize=300&hgSeq.granularity=feature&hgSeq.padding5=50&hgSeq.padding3=50&hgSeq.splitCDSUTR=on&boolshad.hgSeq.splitCDSUTR=0&hgSeq.casing=exon&boolshad.hgSeq.maskRepeats=0&hgSeq.repMasking=lower&hgta_doGenomicDna=get+sequence"
+# cat kg_one_record_per_region.fasta | perl -pe "s/^(>.+)$/\1|/g" |perl -pe "s/\|/\t/g" | perl -pe "s/=([-+])/\t\1\t/" | perl -pe "s/chr(.+?):(\d+)-(\d+)/\t\1\t\2\t\3\t/" | cut -f1,2,3,4,6,8 | perl -pe "s/>.+?\t/|/s" | perl -pe "s/\n//s" | tr "|" "\n" | cut -f5 | sort | uniq | grep -v "n" > ~/.keras/datasets/kg_one_record_per_region.seq.uq
 
 path = get_file('kg_one_record_per_region.seq.uq', origin="")
 
 text = open(path).read()
 print('corpus length:', len(text))
 genes=text.split('\n')
+random.seed(2016)
+random.shuffle(genes)
+
 print('total sequences:', len(genes))
 
-chars = set(genes[2])
-print('total chars:', len(chars))
+chars = set(text.replace('\n',''))
+print('total chars:', len(chars), chars)
 char_indices = dict((c, i) for i, c in enumerate(chars))
 indices_char = dict((i, c) for i, c in enumerate(chars))
 
 # vectorize genes of size at most maxlen
 maxlen = 800 
 step = 1
-batchsize=256
+batchsize=512
 dropout=0.2
 
 if len(sys.argv) > 1:
@@ -42,12 +49,12 @@ def sample(a, temperature=1.0):
     a = np.exp(a) / np.sum(np.exp(a))
     return np.argmax(np.random.multinomial(1, a, 1))
 
-def getNNData(genes, minLength, maxLength):
+def getNNData(data, minLength, maxLength):
     sentences = []
-    for i in range(len(genes)):
-        l=len(genes[i])
+    for i in range(len(data)):
+        l=len(data[i])
         if minLength <= l and l < maxLength:
-            sentences.append(genes[i][:-1])
+            sentences.append(data[i][:-1])
         
     print('nb sequences in range(' + str(minLength) + ',' + str(maxLength) + ') : ', len(sentences))
     #print(sentences)
@@ -57,43 +64,57 @@ def getNNData(genes, minLength, maxLength):
         for t, char in enumerate(sentence):
             X[i, t, char_indices[char]] = 1
     
-    y=np.zeros(X.shape)
+    y=np.zeros(X.shape, dtype=np.bool)
     y[:,:-1,:]=X[:,1:,:]
     return (X,y)
 
 def saveModel(model):
     json_string = model.to_json()
-    open('dnaModel2.json', 'w').write(json_string)
-    model.save_weights('dnaModel2.mod', overwrite=True)    
+    modelfile='dnaModel2.' + tmppart
+     
+    with open(modelfile + '.json', 'w') as f:
+        f.write(json_string)
+        
+    model.save_weights(modelfile + '.mod', overwrite=True)    
 
-def createBatch(batchId, batchsize, X,y):
+def createBatch(batchId, batchsize, timestep, X,y):
     slicemin = batchsize*batchId
     slicemax = min(batchsize*(batchId+1), X.shape[0])
     sliceSize = slicemax-slicemin
     batchSamples=slice(slicemin, slicemax)
-    Xbatch=np.zeros((sliceSize,1,len(chars)), dtype=np.bool)
-    ybatch=np.zeros((sliceSize,len(chars)), dtype=np.bool)
+    Xbatch=np.zeros((batchsize,1,len(chars)), dtype=np.bool)
+    ybatch=np.zeros((batchsize,len(chars)), dtype=np.bool)
     
     Xbatch[:sliceSize,:,:]=np.reshape(X[batchSamples,timestep,:], (sliceSize, 1, len(chars)))
     ybatch[:sliceSize,:]=y[batchSamples,timestep,:]
     return (Xbatch,ybatch)
     
 
-def doValidation():
-    model.save_weights('validation.mod', overwrite=True)
+def doValidation(outfile):
+    print()
+    print("Running Validation")
+    file='validation' + str(datetime.now()).replace(' ','-') + '.mod'
+    model.save_weights(file , overwrite=True)
     model.reset_states()
-
-    for batch in range(len(Xval)/batchsize):
-        for timestep in range(windowEnd):
-            Xbatch,ybatch=createBatch(batch, batchsize, Xval, yval)
+    os.write(outfile,"(----- validation\n")
+    (Xval,yval)=getNNData(genes[-validationSamples:], windowStart,windowEnd)
+    for b in range(1): # just validate batch 0
+        print("batch %d" % (b))
+        for ts in range(windowEnd):
+            Xbatch,ybatch=createBatch(b, batchsize, ts, Xval, yval)
             nonmasked = np.sum(Xbatch)
+            
+            #print("step %d, nonmasked %d Xbatch %s" % (ts, nonmasked, str(Xbatch.shape)))
             
             if nonmasked > 0:
                 [ loss, accuracy ] = model.train_on_batch(Xbatch,ybatch, accuracy=True)
-                normloss = losses[-1][0].tolist / nonmasked
-                print("val loss: %0.3f accuracy: %0.3f, normalized loss: %0.3f" % (loss, accuracy, normloss))
-            
-    model.load_weights('validation.mod') 
+                normloss = loss.tolist() / nonmasked
+                print("val loss: %0.3f accuracy: %0.3f, normalized loss: %0.3f" % (loss.tolist(), accuracy.tolist(), normloss))
+                os.write(outfile,"%d, %d, %d, %d, %0.5f, %d, %0.3f, %0.5f\n" % (epoch, windowStart, b, ts, loss.tolist(), nonmasked, 1000*normloss, accuracy.tolist()))
+    
+    os.write(outfile,"validation -----)\n")
+    model.load_weights(file)
+    os.unlink(file)
 
 print('Build model...')
 model = Sequential()
@@ -117,25 +138,31 @@ windowSize = 200
 
     # train the model, output generated text after each batch
 losses = []
-for epoch in range(60):
+
+resultfile,resultfilename=mkstemp(prefix='training.',suffix='.txt', dir=os.getcwd())
+tmppart=resultfilename.replace(os.getcwd() + '/', '').replace('training.','').replace('.txt','')
+
+os.write(resultfile,"char-rnn dna model: " + str(datetime.now()) + '\n' + "dropout: %0.3f\n" % (dropout))
+
+for epoch in range(100):
     print("")
     print("epoch: %d" % epoch)
-    for windowStart in range(0,1600,windowSize):
+    for windowStart in range(0,200,windowSize): ####
         windowEnd=windowStart+windowSize
         print("")
         print("processing sequences in window %d-%d" % (windowStart, windowEnd))
         (Xtrain,ytrain)=getNNData(genes[:trainingSamples], windowStart,windowEnd)
-        (Xval,yval)=getNNData(genes[-validationSamples:], windowStart,windowEnd)
+        
         if len(Xtrain) == 0:
             continue
-            
-        for batch in range(len(Xtrain)/batchsize):
+        batches = 2 ###### len(Xtrain)/batchsize 
+        for batch in range(batches):
             print()
-            print('-' * 50)
+            print('-' * 20, 'batch #', batch, '/', batches, '-' * 20)
             model.reset_states()
             progbar=Progbar(windowEnd)
             for timestep in range(windowEnd):
-                Xbatch,ybatch=createBatch(batch, batchsize, Xtrain, ytrain)
+                Xbatch,ybatch=createBatch(batch, batchsize, timestep, Xtrain, ytrain)
                 
                 nonmasked = np.sum(Xbatch)
                 if (nonmasked > 0):
@@ -143,10 +170,11 @@ for epoch in range(60):
                     losses.append(loss[0].tolist())
                     normloss = losses[-1] / nonmasked
                     progbar.update(1+timestep, values=[('train loss', loss[0].tolist()), ('timestep', timestep), ('sum(nonmasked)', nonmasked), ('normlossx1000', 1000*normloss)])
-
-    doValidation()
+                    os.write(resultfile,"%d, %d, %d, %d, %0.5f, %d, %0.3f\n" % (epoch, windowStart, batch, timestep, loss[0].tolist(), nonmasked, 1000*normloss))
+    doValidation(resultfile)
     saveModel(model)
 
+os.close(resultfile)
     # plt.title('training loss')
     # plt.plot(losses)
     # plt.show()
