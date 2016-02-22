@@ -112,7 +112,7 @@ def doValidation(outfile):
                 if nonmasked > 0:
                     [ loss, accuracy ] = model.train_on_batch(Xbatch,ybatch, accuracy=True)
                     normloss = loss.tolist() / nonmasked
-                    print("val loss: %0.3f accuracy: %0.3f, normalized loss: %0.3f" % (loss.tolist(), accuracy.tolist(), normloss))
+                    print("val loss: %0.3f accuracy: %0.3f, normloss*1000: %0.3f" % (loss.tolist(), accuracy.tolist(), 1000*normloss))
                     os.write(outfile,"%d, %d, %d, %d, %0.5f, %d, %0.3f, %0.5f\n" % (epoch, windowStart, b, ts, loss.tolist(), nonmasked, 1000*normloss, accuracy.tolist()))
         
     os.write(outfile,"validation -----)\n")
