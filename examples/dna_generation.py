@@ -97,21 +97,24 @@ def doValidation(outfile):
     model.save_weights(file , overwrite=True)
     model.reset_states()
     os.write(outfile,"(----- validation\n")
-    (Xval,yval)=getNNData(genes[-validationSamples:], windowStart,windowEnd)
-    for b in range(1): # just validate batch 0
-        print("batch %d" % (b))
-        for ts in range(windowEnd):
-            Xbatch,ybatch=createBatch(b, batchsize, ts, Xval, yval)
-            nonmasked = np.sum(Xbatch)
-            
-            #print("step %d, nonmasked %d Xbatch %s" % (ts, nonmasked, str(Xbatch.shape)))
-            
-            if nonmasked > 0:
-                [ loss, accuracy ] = model.train_on_batch(Xbatch,ybatch, accuracy=True)
-                normloss = loss.tolist() / nonmasked
-                print("val loss: %0.3f accuracy: %0.3f, normalized loss: %0.3f" % (loss.tolist(), accuracy.tolist(), normloss))
-                os.write(outfile,"%d, %d, %d, %d, %0.5f, %d, %0.3f, %0.5f\n" % (epoch, windowStart, b, ts, loss.tolist(), nonmasked, 1000*normloss, accuracy.tolist()))
-    
+    for windowStart in range(0,1600,windowSize): ####
+        windowEnd=windowStart+windowSize
+        (Xval,yval)=getNNData(genes[-validationSamples:], windowStart,windowEnd)
+        batches = len(Xval)/batchsize ####
+        for b in range(batches):
+            print("batch %d" % (b))
+            for ts in range(windowEnd):
+                Xbatch,ybatch=createBatch(b, batchsize, ts, Xval, yval)
+                nonmasked = np.sum(Xbatch)
+                
+                #print("step %d, nonmasked %d Xbatch %s" % (ts, nonmasked, str(Xbatch.shape)))
+                
+                if nonmasked > 0:
+                    [ loss, accuracy ] = model.train_on_batch(Xbatch,ybatch, accuracy=True)
+                    normloss = loss.tolist() / nonmasked
+                    print("val loss: %0.3f accuracy: %0.3f, normalized loss: %0.3f" % (loss.tolist(), accuracy.tolist(), normloss))
+                    os.write(outfile,"%d, %d, %d, %d, %0.5f, %d, %0.3f, %0.5f\n" % (epoch, windowStart, b, ts, loss.tolist(), nonmasked, 1000*normloss, accuracy.tolist()))
+        
     os.write(outfile,"validation -----)\n")
     model.load_weights(file)
     os.unlink(file)
@@ -129,8 +132,8 @@ model.add(Activation('softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 
 samples=len(genes)
-trainingSamples=int(samples*0.8)
-validationSamples=int(samples*0.2)
+trainingSamples=int(samples*0.9)
+validationSamples=int(samples*0.1)
 
 # train on data ranges of increasingly long sequences
 # eg. 0-200, 200-400 etc...
@@ -171,7 +174,7 @@ for epoch in range(100):
                     normloss = losses[-1] / nonmasked
                     progbar.update(1+timestep, values=[('train loss', loss[0].tolist()), ('timestep', timestep), ('sum(nonmasked)', nonmasked), ('normlossx1000', 1000*normloss)])
                     os.write(resultfile,"%d, %d, %d, %d, %0.5f, %d, %0.3f\n" % (epoch, windowStart, batch, timestep, loss[0].tolist(), nonmasked, 1000*normloss))
-    doValidation(resultfile)
+        doValidation(resultfile)
     saveModel(model)
 
 os.close(resultfile)
