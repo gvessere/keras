@@ -97,7 +97,7 @@ def doValidation(outfile):
     model.save_weights(file , overwrite=True)
     model.reset_states()
     os.write(outfile,"(----- validation\n")
-    for windowStart in range(0,1600,windowSize): ####
+    for windowStart in range(0,200,windowSize): ####
         windowEnd=windowStart+windowSize
         (Xval,yval)=getNNData(genes[-validationSamples:], windowStart,windowEnd)
         batches = len(Xval)/batchsize ####
@@ -150,7 +150,7 @@ os.write(resultfile,"char-rnn dna model: " + str(datetime.now()) + '\n' + "dropo
 for epoch in range(100):
     print("")
     print("epoch: %d" % epoch)
-    for windowStart in range(0,1600,windowSize): ####
+    for windowStart in range(0,200,windowSize): ####
         windowEnd=windowStart+windowSize
         print("")
         print("processing sequences in window %d-%d" % (windowStart, windowEnd))
