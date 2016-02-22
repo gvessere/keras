@@ -110,7 +110,7 @@ def doValidation(outfile):
                 #print("step %d, nonmasked %d Xbatch %s" % (ts, nonmasked, str(Xbatch.shape)))
                 
                 if nonmasked > 0:
-                    [ loss, accuracy ] = model.train_on_batch(Xbatch,ybatch, accuracy=True)
+                    [ loss, accuracy ] = model.train_on_batch (Xbatch,ybatch, accuracy=True)
                     normloss = loss.tolist() / nonmasked
                     print("val loss: %0.3f accuracy: %0.3f, normloss*1000: %0.3f" % (loss.tolist(), accuracy.tolist(), 1000*normloss))
                     os.write(outfile,"%d, %d, %d, %d, %0.5f, %d, %0.3f, %0.5f\n" % (epoch, windowStart, b, ts, loss.tolist(), nonmasked, 1000*normloss, accuracy.tolist()))
@@ -151,6 +151,7 @@ for epoch in range(100):
     print("")
     print("epoch: %d" % epoch)
     for windowStart in range(0,200,windowSize): ####
+        model.reset_states()
         windowEnd=windowStart+windowSize
         print("")
         print("processing sequences in window %d-%d" % (windowStart, windowEnd))
