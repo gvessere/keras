@@ -35,13 +35,12 @@ char_indices = dict((c, i) for i, c in enumerate(chars))
 indices_char = dict((i, c) for i, c in enumerate(chars))
 
 # vectorize genes of size at most maxlen
-maxlen = 800 
 step = 1
-batchsize=1024
+batchsize=128
 dropout=0.2
 
 if len(sys.argv) > 1:
-    dropout=sys.argv[1]
+    dropout=float(sys.argv[1])
 
 def sample(a, temperature=1.0):
     # helper function to sample an index from a probability array
@@ -139,13 +138,28 @@ validationSamples=int(samples*0.1)
 # eg. 0-200, 200-400 etc...
 windowSize = 200
 
-    # train the model, output generated text after each batch
+# train the model, output generated text after each batch
 losses = []
 
 resultfile,resultfilename=mkstemp(prefix='training.',suffix='.txt', dir=os.getcwd())
 tmppart=resultfilename.replace(os.getcwd() + '/', '').replace('training.','').replace('.txt','')
 
 os.write(resultfile,"char-rnn dna model: " + str(datetime.now()) + '\n' + "dropout: %0.3f\n" % (dropout))
+
+def predSeq(seq):
+    from heapq import nlargest
+    
+    x = np.zeros((128, len(seq), len(chars)))
+    for t, char in enumerate(seq):
+        x[0, t, char_indices[char]] = 1.
+
+    for i in range(len(seq)-1):
+        p=model.predict(np.reshape(x[:,i,:],(128,1,8)))[0]
+        #model.reset_states()
+        indexes=range(p.size)
+        preds=nlargest(4,indexes, key=lambda i: p[i])
+        print(seq[i+1], indices_char[preds[0]],indices_char[preds[1]],indices_char[preds[2]],indices_char[preds[3]], p[preds[0]],p[preds[1]],p[preds[2]],p[preds[3]])
+
 
 for epoch in range(100):
     print("")
@@ -179,34 +193,14 @@ for epoch in range(100):
     saveModel(model)
 
 os.close(resultfile)
-    # plt.title('training loss')
-    # plt.plot(losses)
-    # plt.show()
-    
-    # start_index = random.randint(0, len(text) - maxlen - 1)
 
-    # for diversity in [0.2, 0.5, 1.0, 1.2]:
-    #     print()
-    #     print('----- diversity:', diversity)
 
-    #     generated = ''
-    #     sentence = text[start_index: start_index + maxlen]
-    #     generated += sentence
-    #     print('----- Generating with seed: "' + sentence + '"')
-    #     sys.stdout.write(generated)
+# plt.title('training loss')
+# plt.plot(losses)
+# plt.show()
 
-    #     for i in range(400):
-    #         x = np.zeros((1, maxlen, len(chars)))
-    #         for t, char in enumerate(sentence):
-    #             x[0, t, char_indices[char]] = 1.
 
-    #         preds = model.predict(x, verbose=0)[0]
-    #         next_index = sample(preds, diversity)
-    #         next_char = indices_char[next_index]
+#model.load_weights('~/projects/dnaModel/dnaModel2.HQvdv2.mod')
 
-    #         generated += next_char
-    #         sentence = sentence[1:] + next_char
-
-    #         sys.stdout.write(next_char)
-    #         sys.stdout.flush()
-    #     print()
+seq = genes[2]
+predSeq(seq)
