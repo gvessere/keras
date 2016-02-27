@@ -149,12 +149,13 @@ os.write(resultfile,"char-rnn dna model: " + str(datetime.now()) + '\n' + "dropo
 def predSeq(seq):
     from heapq import nlargest
     
-    x = np.zeros((128, len(seq), len(chars)))
+    x = np.zeros((batchsize, len(seq), len(chars)))
     for t, char in enumerate(seq):
         x[0, t, char_indices[char]] = 1.
 
+    model.reset_states()
     for i in range(len(seq)-1):
-        p=model.predict(np.reshape(x[:,i,:],(128,1,8)))[0]
+        p=model.predict(np.reshape(x[:,i,:],(batchsize,1,8)))[0]
         #model.reset_states()
         indexes=range(p.size)
         preds=nlargest(4,indexes, key=lambda i: p[i])
