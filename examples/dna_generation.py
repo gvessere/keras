@@ -7,6 +7,7 @@ from keras.layers.recurrent import LSTM
 from keras.datasets.data_utils import get_file, Progbar
 from tempfile import mkstemp
 from datetime import datetime
+from keras.callbacks import *
 import random
 import os as os
 #import matplotlib.pyplot as plt
@@ -14,6 +15,34 @@ import numpy as np
 import random
 import sys
 
+dropout=0.2
+lstm_layers=2
+batchsteps=20
+batchsize=512
+timesteps=200
+
+if len(sys.argv) > 1:
+    dropout=float(sys.argv[1])
+if len(sys.argv) > 2:
+    lstm_layers=float(sys.argv[2])
+if len(sys.argv) > 3:
+    batchsteps=float(sys.argv[3])
+
+print("dropout(%0.3f), lstm_layers(%d), batchsteps(%d), batchsize(%d), timesteps(%d)" % (dropout, lstm_layers, batchsteps, batchsize, timesteps))
+
+assert lstm_layers >= 1,"need more than one lstm layers"
+
+resultfile,resultfilename=mkstemp(prefix='training.',suffix='.txt', dir=os.getcwd())
+tmppart=resultfilename.replace(os.getcwd() + '/', '').replace('training.','').replace('.txt','')
+
+os.write(resultfile,"char-rnn dna model: " + str(datetime.now()) + '\n')
+os.write(resultfile,"dropout: %0.3f\n" % (dropout))
+os.write(resultfile,"lstmlayers:%d\n" % (lstm_layers))
+os.write(resultfile,"batchsteps:%d\n" % (batchsteps))
+os.write(resultfile,"batchsize:%d\n" % (batchsize))
+os.write(resultfile,"timesteps:%d\n" % (timesteps))
+
+# load sequence data
 # input sequence file obtained with the following commands 
 # returns all gene regions in separate records with uppercased exons
 # wget -O kg_one_record_per_region.fasta "http://genome.ucsc.edu/cgi-bin/hgTables?hgsid=476467603_ZpmULv360T1UveJRDFvf1WjGEDq6&hgSeq.promoter=on&boolshad.hgSeq.promoter=0&hgSeq.promoterSize=300&hgSeq.utrExon5=on&boolshad.hgSeq.utrExon5=0&hgSeq.cdsExon=on&boolshad.hgSeq.cdsExon=0&hgSeq.utrExon3=on&boolshad.hgSeq.utrExon3=0&hgSeq.intron=on&boolshad.hgSeq.intron=0&hgSeq.downstream=on&boolshad.hgSeq.downstream=0&hgSeq.downstreamSize=300&hgSeq.granularity=feature&hgSeq.padding5=50&hgSeq.padding3=50&hgSeq.splitCDSUTR=on&boolshad.hgSeq.splitCDSUTR=0&hgSeq.casing=exon&boolshad.hgSeq.maskRepeats=0&hgSeq.repMasking=lower&hgta_doGenomicDna=get+sequence"
@@ -34,14 +63,6 @@ print('total chars:', len(chars), chars)
 char_indices = dict((c, i) for i, c in enumerate(chars))
 indices_char = dict((i, c) for i, c in enumerate(chars))
 
-# vectorize genes of size at most maxlen
-step = 1
-batchsize=128
-dropout=0.2
-
-if len(sys.argv) > 1:
-    dropout=float(sys.argv[1])
-
 def sample(a, temperature=1.0):
     # helper function to sample an index from a probability array
     a = np.log(a) / temperature
@@ -54,98 +75,54 @@ def getNNData(data, minLength, maxLength):
         l=len(data[i])
         if minLength <= l and l < maxLength:
             sentences.append(data[i][:-1])
-        
+    
+    #sentences = sentences[:len(sentences)/5]
+    
+    # ensure this is a multiple of batchsize
+    sentences=sentences[:len(sentences)/batchsize*batchsize]
     print('nb sequences in range(' + str(minLength) + ',' + str(maxLength) + ') : ', len(sentences))
-    #print(sentences)
+    
     print('Vectorization...')
     X = np.zeros((len(sentences), maxLength, len(chars)), dtype=np.bool)
     for i, sentence in enumerate(sentences):
         for t, char in enumerate(sentence):
             X[i, t, char_indices[char]] = 1
     
-    y=np.zeros(X.shape, dtype=np.bool)
-    y[:,:-1,:]=X[:,1:,:]
-    return (X,y)
+    return X
 
-def saveModel(model):
-    json_string = model.to_json()
-    modelfile='dnaModel2.' + tmppart
-     
-    with open(modelfile + '.json', 'w') as f:
-        f.write(json_string)
+
+class ResetStates(Callback):
+    def __init__(self, timesteps, batchsteps, filesuffix):
+        self.timesteps=timesteps
+        self.batchsteps=batchsteps
+        self.file=open("results." + filesuffix + ".tsv","a")
         
-    model.save_weights(modelfile + '.mod', overwrite=True)    
-
-def createBatch(batchId, batchsize, timestep, X,y):
-    slicemin = batchsize*batchId
-    slicemax = min(batchsize*(batchId+1), X.shape[0])
-    sliceSize = slicemax-slicemin
-    batchSamples=slice(slicemin, slicemax)
-    Xbatch=np.zeros((batchsize,1,len(chars)), dtype=np.bool)
-    ybatch=np.zeros((batchsize,len(chars)), dtype=np.bool)
-    
-    Xbatch[:sliceSize,:,:]=np.reshape(X[batchSamples,timestep,:], (sliceSize, 1, len(chars)))
-    ybatch[:sliceSize,:]=y[batchSamples,timestep,:]
-    return (Xbatch,ybatch)
-    
-
-def doValidation(outfile):
-    print()
-    print("Running Validation")
-    file='validation' + str(datetime.now()).replace(' ','-') + '.mod'
-    model.save_weights(file , overwrite=True)
-    model.reset_states()
-    os.write(outfile,"(----- validation\n")
-    for windowStart in range(0,200,windowSize): ####
-        windowEnd=windowStart+windowSize
-        (Xval,yval)=getNNData(genes[-validationSamples:], windowStart,windowEnd)
-        batches = len(Xval)/batchsize ####
-        for b in range(batches):
-            print("batch %d" % (b))
-            for ts in range(windowEnd):
-                Xbatch,ybatch=createBatch(b, batchsize, ts, Xval, yval)
-                nonmasked = np.sum(Xbatch)
-                
-                #print("step %d, nonmasked %d Xbatch %s" % (ts, nonmasked, str(Xbatch.shape)))
-                
-                if nonmasked > 0:
-                    [ loss, accuracy ] = model.train_on_batch (Xbatch,ybatch, accuracy=True)
-                    normloss = loss.tolist() / nonmasked
-                    print("val loss: %0.3f accuracy: %0.3f, normloss*1000: %0.3f" % (loss.tolist(), accuracy.tolist(), 1000*normloss))
-                    os.write(outfile,"%d, %d, %d, %d, %0.5f, %d, %0.3f, %0.5f\n" % (epoch, windowStart, b, ts, loss.tolist(), nonmasked, 1000*normloss, accuracy.tolist()))
+    def on_batch_end(self, batch, logs={}):
+        if (batch !=0 and batch % (self.timesteps/self.batchsteps) == 0):
+            print()
+            print()
+            print("new batch group, resetting states")
+            self.model.reset_states()
         
-    os.write(outfile,"validation -----)\n")
-    model.load_weights(file)
-    os.unlink(file)
+            for k, v in logs.items():
+                self.file.write("%s\t%s\t" % (k, v))
+            self.file.write("\n")
+            self.file.flush()
 
-print('Build model...')
-model = Sequential()
-model.add(Masking(mask_value=0, batch_input_shape=[batchsize,1,len(chars)]))
-model.add(LSTM(512, return_sequences=True, stateful=True))
-model.add(Dropout(dropout))
-model.add(LSTM(512, return_sequences=False, stateful=True))
-model.add(Dropout(dropout))
-model.add(Dense(len(chars)))
-model.add(Activation('softmax'))
+def shuffle_for_stateful(X):
+    assert(X.shape[0]%batchsize==0)
+    Xgrouped=X.reshape(batchsize, -1, X.shape[1], X.shape[2])
+    Xgrouped=Xgrouped.transpose(1,0,2,3) # (batch groups, batchsize, timestep, basecall)
 
-model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
+    ygrouped=np.zeros(Xgrouped.shape)
+    ygrouped[:,:, :-1,:]=Xgrouped[:,:,1:,:]
 
-samples=len(genes)
-trainingSamples=int(samples*0.9)
-validationSamples=int(samples*0.1)
+    Xgrouped=Xgrouped.reshape(-1, batchsteps, Xgrouped.shape[3]) # every timesteps keras batches we finished a group of sequences -> needs reset
+    ygrouped=ygrouped.reshape(-1, ygrouped.shape[3])
+    ygrouped=ygrouped[::batchsteps]
+    return (Xgrouped, ygrouped)
 
-# train on data ranges of increasingly long sequences
-# eg. 0-200, 200-400 etc...
-windowSize = 200
-
-# train the model, output generated text after each batch
-losses = []
-
-resultfile,resultfilename=mkstemp(prefix='training.',suffix='.txt', dir=os.getcwd())
-tmppart=resultfilename.replace(os.getcwd() + '/', '').replace('training.','').replace('.txt','')
-
-os.write(resultfile,"char-rnn dna model: " + str(datetime.now()) + '\n' + "dropout: %0.3f\n" % (dropout))
-
+ 
 def predSeq(seq):
     from heapq import nlargest
     
@@ -155,53 +132,50 @@ def predSeq(seq):
 
     model.reset_states()
     for i in range(len(seq)-1):
-        p=model.predict(np.reshape(x[:,i,:],(batchsize,1,8)))[0]
+        p=model.predict(np.reshape(x[:,i,:],(batchsize,batchsteps,len(chars))))[0]
         #model.reset_states()
         indexes=range(p.size)
         preds=nlargest(4,indexes, key=lambda i: p[i])
         print(seq[i+1], indices_char[preds[0]],indices_char[preds[1]],indices_char[preds[2]],indices_char[preds[3]], p[preds[0]],p[preds[1]],p[preds[2]],p[preds[3]])
 
+print("Preparing training data...")
+X=getNNData(genes, 0,timesteps)
+validatefraction=.05
+valcount=((int) (len(X) * validatefraction)) / batchsize * batchsize
+Xval=X[-valcount:]
 
-for epoch in range(100):
-    print("")
-    print("epoch: %d" % epoch)
-    for windowStart in range(0,200,windowSize): ####
-        model.reset_states()
-        windowEnd=windowStart+windowSize
-        print("")
-        print("processing sequences in window %d-%d" % (windowStart, windowEnd))
-        (Xtrain,ytrain)=getNNData(genes[:trainingSamples], windowStart,windowEnd)
-        
-        if len(Xtrain) == 0:
-            continue
-        batches = len(Xtrain)/batchsize ####
-        for batch in range(batches):
-            print()
-            print('-' * 20, 'batch #', batch, '/', batches, '-' * 20)
-            model.reset_states()
-            progbar=Progbar(windowEnd)
-            for timestep in range(windowEnd):
-                Xbatch,ybatch=createBatch(batch, batchsize, timestep, Xtrain, ytrain)
-                
-                nonmasked = np.sum(Xbatch)
-                if (nonmasked > 0):
-                    loss=model.train_on_batch(Xbatch,ybatch)
-                    losses.append(loss[0].tolist())
-                    normloss = losses[-1] / nonmasked
-                    progbar.update(1+timestep, values=[('train loss', loss[0].tolist()), ('timestep', timestep), ('sum(nonmasked)', nonmasked), ('normlossx1000', 1000*normloss)])
-                    os.write(resultfile,"%d, %d, %d, %d, %0.5f, %d, %0.3f\n" % (epoch, windowStart, batch, timestep, loss[0].tolist(), nonmasked, 1000*normloss))
-        doValidation(resultfile)
-    saveModel(model)
-
-os.close(resultfile)
+X=X[:-valcount]
+[X, y] = shuffle_for_stateful(X)
+[Xval, yval] = shuffle_for_stateful(Xval)
 
 
-# plt.title('training loss')
-# plt.plot(losses)
-# plt.show()
+print('Building model...')
+model = Sequential()
+model.add(Masking(mask_value=0, batch_input_shape=[batchsize,batchsteps,len(chars)]))
+for i in range(lstm_layers-1):
+    model.add(LSTM(512, return_sequences=True, stateful=True))
+    model.add(Dropout(dropout))
+model.add(LSTM(512, return_sequences=False, stateful=True))
+model.add(Dropout(dropout))
+model.add(Dense(len(chars))) # input dim (512,) output dim (8,)
+model.add(Activation('softmax'))
+
+model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
+print('Done')
+
+resetstates=ResetStates(timesteps, batchsteps, tmppart)
+cp=ModelCheckpoint('dnaModel3.' + tmppart + '.mod')
+
+hist=model.fit(X,y, shuffle=False,validation_data=(Xval,yval), batch_size= batchsize, nb_epoch=100, show_accuracy=True, callbacks = [resetstates, cp])
+os.write(resultfile, hist.history)
 
 
-#model.load_weights('~/projects/dnaModel/dnaModel2.HQvdv2.mod')
+# # plt.title('training loss')
+# # plt.plot(losses)
+# # plt.show()
 
-seq = genes[2]
-predSeq(seq)
+
+# #model.load_weights('~/projects/dnaModel/dnaModel2.HQvdv2.mod')
+
+# seq = genes[2]
+# predSeq(seq)
