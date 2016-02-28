@@ -24,9 +24,9 @@ timesteps=200
 if len(sys.argv) > 1:
     dropout=float(sys.argv[1])
 if len(sys.argv) > 2:
-    lstm_layers=float(sys.argv[2])
+    lstm_layers=int(sys.argv[2])
 if len(sys.argv) > 3:
-    batchsteps=float(sys.argv[3])
+    batchsteps=int(sys.argv[3])
 
 print("dropout(%0.3f), lstm_layers(%d), batchsteps(%d), batchsize(%d), timesteps(%d)" % (dropout, lstm_layers, batchsteps, batchsize, timesteps))
 
