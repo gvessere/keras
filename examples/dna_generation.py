@@ -12,12 +12,11 @@ import random
 import os as os
 #import matplotlib.pyplot as plt
 import numpy as np
-import random
 import sys
 
 dropout=0.2
-lstm_layers=2
-batchsteps=20
+lstm_layers=4
+batchsteps=10
 batchsize=512
 timesteps=200
 
@@ -152,9 +151,9 @@ print('Building model...')
 model = Sequential()
 model.add(Masking(mask_value=0, batch_input_shape=[batchsize,batchsteps,len(chars)]))
 for i in range(lstm_layers-1):
-    model.add(LSTM(512, return_sequences=True, stateful=True))
+    model.add(LSTM(128, return_sequences=True, stateful=True))
     model.add(Dropout(dropout))
-model.add(LSTM(512, return_sequences=False, stateful=True))
+model.add(LSTM(128, return_sequences=False, stateful=True))
 model.add(Dropout(dropout))
 model.add(Dense(len(chars))) # input dim (512,) output dim (8,)
 model.add(Activation('softmax'))
@@ -164,7 +163,7 @@ print('Done')
 
 
 resetstates=ResetStates(timesteps, batchsteps, tmppart)
-cp=ModelCheckpoint('dnaModel3.' + tmppart + '.mod')
+cp=ModelCheckpoint('dnaModel3.' + tmppart + '.mod',save_best_only=True)
 
 hist=model.fit(X,y, shuffle=False,validation_data=(Xval,yval), batch_size= batchsize, nb_epoch=100, show_accuracy=True, callbacks = [resetstates, cp])
 os.write(resultfile, hist.history)
