@@ -115,7 +115,7 @@ def shuffle_for_stateful(X):
     Xgrouped=Xgrouped.transpose(1,0,2,3) # (batch groups, batchsize, timestep, basecall)
 
     ygrouped=np.zeros(Xgrouped.shape)
-    ygrouped[:,:, :-1,:]=Xgrouped[:,:,1:,:]
+    ygrouped[:,:, :-batchsteps,:]=Xgrouped[:,:,batchsteps:,:]
 
     Xgrouped=Xgrouped.reshape(-1, batchsteps, Xgrouped.shape[3]) # every timesteps keras batches we finished a group of sequences -> needs reset
     ygrouped=ygrouped.reshape(-1, ygrouped.shape[3])
@@ -125,14 +125,13 @@ def shuffle_for_stateful(X):
  
 def predSeq(seq):
     from heapq import nlargest
-    
     x = np.zeros((batchsize, len(seq), len(chars)))
     for t, char in enumerate(seq):
         x[0, t, char_indices[char]] = 1.
-
+        
     model.reset_states()
-    for i in range(len(seq)-1):
-        p=model.predict(np.reshape(x[:,i,:],(batchsize,batchsteps,len(chars))))[0]
+    for i in range(len(seq)-batchsteps):
+        p=model.predict(np.reshape(x[:,i:i+batchsteps,:],(batchsize,batchsteps,len(chars))), batch_size=batchsize)[0]
         #model.reset_states()
         indexes=range(p.size)
         preds=nlargest(4,indexes, key=lambda i: p[i])
@@ -163,6 +162,7 @@ model.add(Activation('softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 print('Done')
 
+
 resetstates=ResetStates(timesteps, batchsteps, tmppart)
 cp=ModelCheckpoint('dnaModel3.' + tmppart + '.mod')
 
@@ -175,7 +175,6 @@ os.write(resultfile, hist.history)
 # # plt.show()
 
 
-# #model.load_weights('~/projects/dnaModel/dnaModel2.HQvdv2.mod')
-
+# model.load_weights('dnaModel3.1XK4Qt.mod')
 # seq = genes[2]
 # predSeq(seq)
