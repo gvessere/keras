@@ -84,6 +84,9 @@ def getNNData(data, minLength, maxLength):
     print('Vectorization...')
     X = np.zeros((len(sentences), maxLength, len(chars)), dtype=np.bool)
     for i, sentence in enumerate(sentences):
+        # make sure sequence length is a multiple of batchsteps
+        # or we will predict no characters on unmasked seq at the end
+        sentence=sentence[:1+(len(sentence)-1)/batchsteps*batchsteps]
         for t, char in enumerate(sentence):
             X[i, t, char_indices[char]] = 1
     
@@ -110,31 +113,47 @@ class ResetStates(Callback):
 
 def shuffle_for_stateful(X):
     assert(X.shape[0]%batchsize==0)
+    assert(X.shape[1]%batchsteps==0)
+    
     Xgrouped=X.reshape(batchsize, -1, X.shape[1], X.shape[2])
-    Xgrouped=Xgrouped.transpose(1,0,2,3) # (batch groups, batchsize, timestep, basecall)
+    Xgrouped=Xgrouped.transpose(1,0,2,3) # (batch groups, batchsize, timesteps, basecall)
 
-    ygrouped=np.zeros(Xgrouped.shape)
+    ygrouped=np.zeros(Xgrouped.shape, dtype=np.bool)
     ygrouped[:,:, :-batchsteps,:]=Xgrouped[:,:,batchsteps:,:]
 
     Xgrouped=Xgrouped.reshape(-1, batchsteps, Xgrouped.shape[3]) # every timesteps keras batches we finished a group of sequences -> needs reset
     ygrouped=ygrouped.reshape(-1, ygrouped.shape[3])
     ygrouped=ygrouped[::batchsteps]
+    # for i in range(2*batchsize):
+    #     data=""
+    #     #print(len(Xgrouped[i]))
+    #     for j,onehot in enumerate(Xgrouped[i]):
+    #         ci=np.where(onehot==True)
+    #         if len(ci[0]>0):
+    #             c=indices_char[ci[0][0]]
+    #         else:
+    #             c=" "
+    #         data=data+c
+    #     ci=np.where(ygrouped[i]==True)
+    #     if len(ci[0]>0):
+    #         c=indices_char[ci[0][0]]
+    #         data=data+"-"+c
+    #     print(data)
     return (Xgrouped, ygrouped)
 
  
-def predSeq(seq):
+def predSeq(seq, steps=batchsteps):
     from heapq import nlargest
-    x = np.zeros((batchsize, len(seq), len(chars)))
+    x = np.zeros((batchsize, timesteps, len(chars)), dtype=np.bool)
     for t, char in enumerate(seq):
-        x[0, t, char_indices[char]] = 1.
+        x[0, t, char_indices[char]] = True
         
     model.reset_states()
-    for i in range(len(seq)-batchsteps):
-        p=model.predict(np.reshape(x[:,i:i+batchsteps,:],(batchsize,batchsteps,len(chars))), batch_size=batchsize)[0]
-        #model.reset_states()
+    for i in np.arange(0,len(seq)-steps,steps):
+        p=model.predict(x[:,i:i+steps,:], batch_size=batchsize)[0]
         indexes=range(p.size)
         preds=nlargest(4,indexes, key=lambda i: p[i])
-        print(seq[i+1], indices_char[preds[0]],indices_char[preds[1]],indices_char[preds[2]],indices_char[preds[3]], p[preds[0]],p[preds[1]],p[preds[2]],p[preds[3]])
+        print(seq[i+steps], indices_char[preds[0]],indices_char[preds[1]],indices_char[preds[2]],indices_char[preds[3]], p[preds[0]],p[preds[1]],p[preds[2]],p[preds[3]])
 
 print("Preparing training data...")
 X=getNNData(genes, 0,timesteps)
