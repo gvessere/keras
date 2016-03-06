@@ -115,15 +115,17 @@ def shuffle_for_stateful(X):
     assert(X.shape[0]%batchsize==0)
     assert(X.shape[1]%batchsteps==0)
     
-    Xgrouped=X.reshape(batchsize, -1, X.shape[1], X.shape[2])
-    Xgrouped=Xgrouped.transpose(1,0,2,3) # (batch groups, batchsize, timesteps, basecall)
 
-    ygrouped=np.zeros(Xgrouped.shape, dtype=np.bool)
-    ygrouped[:,:, :-batchsteps,:]=Xgrouped[:,:,batchsteps:,:]
+    Xs=X.reshape(X.shape[0]/batchsize, batchsize, X.shape[1], X.shape[2])
+    ys=np.zeros(Xs.shape, dtype=bool)
+    ys[:,:,:-batchsteps,:]=Xs[:,:,batchsteps:,:]
+    Xs=Xs.reshape(Xs.shape[0], Xs.shape[1], Xs.shape[2]/batchsteps, batchsteps, Xs.shape[3])
+    Xs=Xs.transpose(0,2,1,3,4)
+    Xs=Xs.reshape(-1, Xs.shape[3], Xs.shape[4])
+    ys=ys[:,:,::batchsteps,:]
+    ys=ys.transpose(0,2,1,3)
+    ys=ys.reshape(-1,ys.shape[3])
 
-    Xgrouped=Xgrouped.reshape(-1, batchsteps, Xgrouped.shape[3]) # every timesteps keras batches we finished a group of sequences -> needs reset
-    ygrouped=ygrouped.reshape(-1, ygrouped.shape[3])
-    ygrouped=ygrouped[::batchsteps]
     # for i in range(2*batchsize):
     #     data=""
     #     #print(len(Xgrouped[i]))
@@ -139,7 +141,8 @@ def shuffle_for_stateful(X):
     #         c=indices_char[ci[0][0]]
     #         data=data+"-"+c
     #     print(data)
-    return (Xgrouped, ygrouped)
+            
+    return (Xs, ys)
 
  
 def predSeq(seq, steps=batchsteps):
