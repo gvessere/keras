@@ -99,7 +99,7 @@ class ResetStates(Callback):
         self.batchsteps=batchsteps
         self.file=open("results." + filesuffix + ".tsv","a")
         
-    def on_batch_end(self, batch, logs={}):
+    def on_batch_begin(self, batch, logs={}):
         if (batch !=0 and batch % (self.timesteps/self.batchsteps) == 0):
             print()
             print()
@@ -126,17 +126,17 @@ def shuffle_for_stateful(X):
     ys=ys.transpose(0,2,1,3)
     ys=ys.reshape(-1,ys.shape[3])
 
-    # for i in range(2*batchsize):
+    #     print(i)
     #     data=""
     #     #print(len(Xgrouped[i]))
-    #     for j,onehot in enumerate(Xgrouped[i]):
+    #     for j,onehot in enumerate(Xs[i]):
     #         ci=np.where(onehot==True)
     #         if len(ci[0]>0):
     #             c=indices_char[ci[0][0]]
     #         else:
     #             c=" "
     #         data=data+c
-    #     ci=np.where(ygrouped[i]==True)
+    #     ci=np.where(ys[i]==True)
     #     if len(ci[0]>0):
     #         c=indices_char[ci[0][0]]
     #         data=data+"-"+c
