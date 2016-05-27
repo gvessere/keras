@@ -796,7 +796,7 @@ def dropout2(x, level, seed=None):
     if seed is None:
         seed = np.random.randint(10e6)
     srng = RandomStreams(seed=seed)
-    retain_prob = 1. - level
+    retain_prob = 1. - 1.2*level
     # a=np.linspace(0,1,30)
     # b=np.array([a,1-a]).T
     #https://gist.github.com/eickenberg/f1a0e368961ef6d05b5b 
@@ -811,7 +811,7 @@ def dropout2(x, level, seed=None):
     f=raw_random.multinomial(randstate, [xf.shape[0],], n=1, pvals=probs) #[[ .5, .5 ],[ .1, .9 ],[ .9, .1 ]]) #g, 1-g
     f=x*f[1][:,0].reshape(x.shape)
     
-    x /= retain_prob
+    x /= 1- probs[:,0].sum() / probs.shape[0] 
     return x
 
 
