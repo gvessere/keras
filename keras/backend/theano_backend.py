@@ -788,6 +788,31 @@ def dropout(x, level, seed=None):
     x *= rng.binomial(x.shape, p=retain_prob, dtype=x.dtype)
     x /= retain_prob
     return x
+    
+from theano.tensor import raw_random
+def dropout2(x, level, seed=None):
+    if level < 0. or level >= 1:
+        raise Exception('Dropout level must be in interval [0, 1[.')
+    if seed is None:
+        seed = np.random.randint(10e6)
+    srng = RandomStreams(seed=seed)
+    retain_prob = 1. - level
+    # a=np.linspace(0,1,30)
+    # b=np.array([a,1-a]).T
+    #https://gist.github.com/eickenberg/f1a0e368961ef6d05b5b 
+    
+    
+    xf=T.flatten(x)
+    prob=T.flatten(T.extra_ops.repeat(T.arange(x.shape[0])/x.shape[0].astype('float32'),x.shape[1]))
+    g=retain_prob+(prob)*(1-retain_prob)
+    probs=T.as_tensor_variable([g, 1-g]).T
+    #print probs.eval({x:xval})
+    randstate=raw_random.random_state_type()
+    f=raw_random.multinomial(randstate, [xf.shape[0],], n=1, pvals=probs) #[[ .5, .5 ],[ .1, .9 ],[ .9, .1 ]]) #g, 1-g
+    f=x*f[1][:,0].reshape(x.shape)
+    
+    x /= retain_prob
+    return x
 
 
 def l2_normalize(x, axis):
