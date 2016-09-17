@@ -990,6 +990,30 @@ def hard_sigmoid(x):
 
 def tanh(x):
     return T.tanh(x)
+    
+from theano.tensor import raw_random
+def dropout2(x, level_low, level_high, seed=None):
+    if level_low < 0. or level_low >= 1:
+        raise Exception('Dropout level must be in interval [0, 1[.')
+    if seed is None:
+        seed = np.random.randint(10e6)
+    srng = RandomStreams(seed=seed)
+    # a=np.linspace(0,1,30)
+    # b=np.array([a,1-a]).T
+    #https://gist.github.com/eickenberg/f1a0e368961ef6d05b5b 
+    
+    
+    xf=T.flatten(x)
+    prob=T.flatten(T.extra_ops.repeat(T.arange(x.shape[0])/x.shape[0].astype('float32'),x.shape[1]))
+    g=level_low+(level_high-level_low)*prob
+    probs=T.as_tensor_variable([g, 1-g]).T
+    #print probs.eval({x:xval})
+    randstate=raw_random.random_state_type()
+    f=raw_random.multinomial(randstate, [xf.shape[0],], n=1, pvals=probs) #[[ .5, .5 ],[ .1, .9 ],[ .9, .1 ]]) #g, 1-g
+    f=x*f[1][:,0].reshape(x.shape)
+    
+    x /= 1- probs[:,0].sum() / probs.shape[0] 
+    return x.astype('float32')
 
 
 def dropout(x, level, noise_shape=None, seed=None):

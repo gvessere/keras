@@ -15,11 +15,11 @@ from __future__ import print_function
 from keras.datasets import cifar10
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten
+from keras.layers import Dense, Dropout, Dropout2, Activation, Flatten
 from keras.layers import Convolution2D, MaxPooling2D
 from keras.optimizers import SGD
 from keras.utils import np_utils
-
+import sys
 batch_size = 32
 nb_classes = 10
 nb_epoch = 200
@@ -40,6 +40,11 @@ print(X_test.shape[0], 'test samples')
 Y_train = np_utils.to_categorical(y_train, nb_classes)
 Y_test = np_utils.to_categorical(y_test, nb_classes)
 
+low1=sys.argv[0]
+high1=sys.argv[1]
+low2=sys.argv[2]
+high2=sys.argv[3]
+
 model = Sequential()
 
 model.add(Convolution2D(32, 3, 3, border_mode='same',
@@ -48,19 +53,19 @@ model.add(Activation('relu'))
 model.add(Convolution2D(32, 3, 3))
 model.add(Activation('relu'))
 model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(Dropout(0.25))
+model.add(Dropout2(low1, high1))
 
 model.add(Convolution2D(64, 3, 3, border_mode='same'))
 model.add(Activation('relu'))
 model.add(Convolution2D(64, 3, 3))
 model.add(Activation('relu'))
 model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(Dropout(0.25))
+model.add(Dropout2(low1, high1))
 
 model.add(Flatten())
 model.add(Dense(512))
 model.add(Activation('relu'))
-model.add(Dropout(0.5))
+model.add(Dropout2(low2,high2))
 model.add(Dense(nb_classes))
 model.add(Activation('softmax'))
 

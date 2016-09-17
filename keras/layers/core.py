@@ -63,6 +63,34 @@ class Masking(Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
+class Dropout2(Layer):
+    '''Applies Dropout to the input. Dropout consists in randomly setting
+    a fraction `p` of input units to 0 at each update during training time,
+    which helps prevent overfitting.
+    # Arguments
+        p: float between 0 and 1. Fraction of the input units to drop.
+    # References
+        - [Dropout: A Simple Way to Prevent Neural Networks from Overfitting](http://www.cs.toronto.edu/~rsalakhu/papers/srivastava14a.pdf)
+    '''
+    def __init__(self, plow, phigh, **kwargs):
+        self.plow = plow
+	self.phigh = phigh
+        if 0. < self.plow < 1.:
+            self.uses_learning_phase = True
+        self.supports_masking = True
+        super(Dropout2, self).__init__(**kwargs)
+
+    def call(self, x, mask=None):
+        if 0. < self.plow < 1.:
+            x = K.in_train_phase(K.dropout2(x, level_low=self.plow, level_high=self.phigh), x)
+        return x
+
+    def get_config(self):
+        config = {'plow': self.plow}
+	config = {'phigh': self.phigh}
+        base_config = super(Dropout2, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
 class Dropout(Layer):
     '''Applies Dropout to the input. Dropout consists in randomly setting
     a fraction `p` of input units to 0 at each update during training time,
